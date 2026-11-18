@@ -26,6 +26,7 @@ class HuaweiS5720:
         self.connection = connection
         self.model = None
         self.version_output = ""
+        self.serial_number = None
 
     def detect(self):
         print("\n[*] Определяем модель устройства...")
@@ -38,7 +39,7 @@ class HuaweiS5720:
 
         # Ищем модель серии S5720
         match = re.search(
-            r"\bS5720[\w-]*\b",
+            r"\bS57[\w-]*\b",
             output,
             re.IGNORECASE
         )
@@ -50,16 +51,38 @@ class HuaweiS5720:
             return True
 
         print("[!] Huawei S5720 не обнаружен")
-        print(output)
+        print(output  )
         return False
 
+    def get_serial_number(self, timeout=15):
+        self.serial_number = None
+        self.connection.send_command("display esn")
+
+        deadline = time.monotonic() + timeout
+        output = ""
+
+        while time.monotonic() < deadline:
+            output += self.connection.read_output(wait=0.3)
+
+            match = re.search(
+                r"^[ \t]*ESN of slot 0:[ \t]*"
+                r"([A-Za-z0-9_-]+)[ \t]*\r?\n",
+                output,
+                re.MULTILINE | re.IGNORECASE
+            )
+
+            if match:
+                self.serial_number = match.group(1)
+                return True
+
+        return False
 
 
     def reset(self):
         import re
 
-        if not self.model or not self.model.startswith("S5720"):
-            print("[!] Модель S5720 не подтверждена")
+        if not self.model or not self.model.startswith("S57"):
+            print("[!] Модель не подтверждена")
             return False
 
         print(f"\n[!] СБРОС УСТРОЙСТВА: {self.model}")
@@ -88,12 +111,12 @@ class HuaweiS5720:
 
        
            
-        self.connection.send_command("n")
+        self.connection.send_command("Y")
         
         try:
             self._wait_response (
             expected="[Y/N]",
-            timeout=5
+            timeout=10
         )
         except TimeoutError:
             print ("Не получен вопрос перезагрузки")
@@ -104,12 +127,12 @@ class HuaweiS5720:
         print("\n[+] Сохранённая конфигурация удалена")
         print("[*] Запускаем перезагрузку...")
 
-        self.connection.send_command("n")
+        self.connection.send_command("Y")
 
         try:
             self._wait_response(
             expected="System is rebooting",
-            timeout=10
+            timeout=400
         )
             
 
@@ -119,4 +142,4 @@ class HuaweiS5720:
         print("Оборудование перезагружается!")
         return True
 
-           
+               

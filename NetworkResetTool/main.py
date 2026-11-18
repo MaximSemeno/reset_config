@@ -6,6 +6,9 @@ from Core.serial_connection import (
     SerialConnection,
     get_available_ports
 )
+from pathlib import Path
+from Core.report import SessionReport
+
 
 
 
@@ -43,47 +46,140 @@ def select_port():
         print("[!] Выберите порт")
 
 
-def main():
-    print("=" * 40)
-    print("       NETWORK RESET TOOL v0.2")
-    print("=" * 40)
-
-    print(f"Операционная система: {platform.system()}")
-
-    port = select_port()
-
-    if not port:
-        print("[!] Порт не выбран")
-        return
-
-    device = SerialConnection(port=port)
+def process_device(port, report):
+    connection = SerialConnection(port=port)
+    number = None
+    result_text = "Прервано"
 
     try:
-        device.connect()
+        connection.connect()
 
-        auth = DeviceAuth(device)
-
+        auth = DeviceAuth(connection)
         if not auth.login():
-            print("Не удалось войти на оборудование")
+            print("[!] Не удалось войти на оборудование")
             return
-        print("Авторизация выполнена успешно ")
 
-        huawei = HuaweiS5720(device)
-        if huawei.detect():
-            print("Устройство определено. Это Huawei S5720")
-            huawei.reset()
+        device = HuaweiS5720(connection) 
+
+        if not device.detect():
+            print("[!] Модель не определена, сброс остановлен")
+            return
+
+        if not device.get_serial_number():
+            print("[!] Серийник не получен, сброс остановлен")
+            return
+
+        print(f"Модель: {device.model}")
+        print(f"Серийный номер: {device.serial_number}")
+
+        # Если запись не удалась, до сброса не дойдём.
+        number = report.add_device(
+            device.model,
+            device.serial_number
+        )
+
+        confirmation = input(
+            "Для сброса введи RESET, для пропуска нажми Enter: "
+        ).strip()
+
+        if confirmation != "RESET":
+            result_text = "Сброс пропущен пользователем"
+            return
+
+        result = device.reset()
+
+        if result:
+            result_text = (
+                "Сброс выполнен. Перезагрузка запущена. "
+                
+            )
         else:
-            print("Устройство не определено")
+            result_text = (
+                "Процедура остановлена. Сброс не подтверждён."
+            )
 
-        
+    except OSError:
+        # Ошибки порта или записи отчёта завершают сеанс.
+        result_text = "Ошибка ввода-вывода, результат неизвестен"
+        raise
 
-
-       
     except Exception as error:
-        print(f"[!] Ошибка: {error}")
+        result_text = (
+            f"Ошибка {type(error).__name__}, "
+            "результат сброса неизвестен"
+        )
+        print(f"[!] {result_text}")
 
     finally:
-        device.disconnect()
+        try:
+            if number is not None:
+                report.add_result(number, result_text)
+        finally:
+            connection.disconnect()
+
+
+def ask_next_device():
+    while True:
+        print("\n1 — Следующий коммутатор")
+        print("0 — Завершить сеанс")
+
+        choice = input("Выбор: ").strip()
+
+        if choice == "1":
+            return True
+        if choice == "0":
+            return False
+
+        print("Введи 1 или 0")
+
+
+def main():
+    print("NETWORK RESET TOOL")
+    print(f"Операционная система: {platform.system()}")
+
+    reports_dir = Path(__file__).resolve().parent / "reports"
+
+    try:
+        report = SessionReport(reports_dir)
+    except OSError as error:
+        print(f"[!] Не удалось создать отчёт: {error}")
+        return
+
+    print(f"[*] Отчёт: {report.path}")
+    interrupted = True
+
+    try:
+        while True:
+            input(
+                "\nПодключи один коммутатор консольным кабелем "
+                "и нажми Enter..."
+            )
+
+            port = select_port()
+
+            if port:
+                process_device(port, report)
+            else:
+                print("[!] Порт не выбран")
+
+            if not ask_next_device():
+                break
+
+        interrupted = False
+
+    except (KeyboardInterrupt, EOFError):
+        print("\n[!] Работа прервана пользователем")
+
+    except Exception as error:
+        print(f"\n[!] Сеанс остановлен: {error}")
+
+    finally:
+        try:
+            report.finish(interrupted=interrupted)
+        except OSError as error:
+            print(f"[!] Не удалось записать окончание отчёта: {error}")
+
+        print(f"[*] Файл отчёта: {report.path}")
 
 
 
