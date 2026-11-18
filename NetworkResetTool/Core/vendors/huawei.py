@@ -3,6 +3,25 @@ import time
 
 class HuaweiS5720:
 
+
+    def _wait_response(self, expected, timeout=30):
+        deadline = time.monotonic() + timeout
+        output = ""
+
+        while time.monotonic() < deadline:
+            chunk = self.connection.read_output(wait=0.3)
+
+            if chunk:
+                output += chunk
+                print(chunk, end="", flush=True)
+
+                if expected in output:
+                    return output
+
+        raise TimeoutError(
+            f"За {timeout} секунд не получен ответ: {expected!r}"
+        )
+
     def __init__(self, connection):
         self.connection = connection
         self.model = None
@@ -34,32 +53,7 @@ class HuaweiS5720:
         print(output)
         return False
 
-    def _wait_response(self, timeout=30):
-        import time
 
-        deadline = time.monotonic() + timeout
-        output = ""
-
-        while time.monotonic() < deadline:
-            chunk = self.connection.read_output(wait=0.3)
-
-            if chunk:
-                output += chunk
-                print(chunk, end="", flush=True)
-
-                if output.rstrip().endswith(("[Y/N]:", "[Y/N]")):
-                    return output
-
-                if "Succeeded in clearing" in output:
-                    return output
-
-                if "System is rebooting" in output:
-                    return output
-
-                if "Error:" in output:
-                    return output
-
-        return output
 
     def reset(self):
         import re
@@ -89,16 +83,34 @@ class HuaweiS5720:
             print("\n[!] Не получено подтверждение удаления")
             return False
 
+           
+        self.connection.send_command("n")
         
-        self.connection.send_command("y")
-        output = self._wait_response(timeout=40)
-
+        try:
+            self._wait_response (
+            expected="[Y/N]",
+            timeout=5
+        )
+        except TimeoutError:
+            print ("Не получен вопрос перезагрузки")
+            return False
+        
+            
         
         print("\n[+] Сохранённая конфигурация удалена")
         print("[*] Запускаем перезагрузку...")
 
-        self.connection.send_command("y")
-        output = self._wait_response(timeout=40)
+        self.connection.send_command("n")
 
+        if self._wait_response(
+            expected="System is rebooting",
+            timeout=10
+        ):
+            print("Оборудование перезагружается!")
+            return True
 
-        
+        else: 
+            print ("Оборудование не ушло на перезагрузку!")
+            return False
+
+           
