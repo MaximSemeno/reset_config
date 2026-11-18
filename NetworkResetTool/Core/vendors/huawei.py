@@ -102,15 +102,17 @@ class HuaweiS5720:
 
         self.connection.send_command("n")
 
-        if self._wait_response(
+        try:
+            self._wait_response(
             expected="System is rebooting",
             timeout=10
-        ):
-            print("Оборудование перезагружается!")
-            return True
+        )
+            
 
-        else: 
+        except TimeoutError:
             print ("Оборудование не ушло на перезагрузку!")
             return False
+        print("Оборудование перезагружается!")
+        return True
 
            
