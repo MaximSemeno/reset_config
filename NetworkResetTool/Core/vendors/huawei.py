@@ -76,13 +76,17 @@ class HuaweiS5720:
         self.connection.send_command("reset factory-configuration")
         time.sleep(5)
         
-        output = self._wait_response()
+        try:
+            output = self._wait_response(
+                expected="[Y/N]",
+                timeout=15
+            )
+        except TimeoutError:
+            print("Не получен вопрос подтверждения сброса")
+            return False
         
 
-        if not re.search(r"\[Y/N\]\s*:", output, re.I):
-            print("\n[!] Не получено подтверждение удаления")
-            return False
-
+       
            
         self.connection.send_command("n")
         
