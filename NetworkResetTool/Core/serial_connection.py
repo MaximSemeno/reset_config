@@ -34,6 +34,14 @@ class SerialConnection:
         )
         self.connection.flush()
 
+    def send_raw(self, text):
+        """Отправка символов без Enter — например, пробела."""
+        if not self.connection or not self.connection.is_open:
+            raise ConnectionError("Нет подключения")
+
+        self.connection.write(text.encode("utf-8"))
+        self.connection.flush()
+
     def read_output(self, wait=2):
         if not self.connection or not self.connection.is_open:
             raise ConnectionError("Нет подключения")
