@@ -59,8 +59,8 @@ class DeviceAuth:
 
         print(f"[*] Загружено учётных записей: {len(credentials)}")
 
-        for number, (username, _) in enumerate(credentials, 1):
-            print(f"{number}. {username} (пароль скрыт)")
+        for number, (username, password) in enumerate(credentials, 1):
+            print(f"{number}. {username}, {password}")
 
         choice = input("\nВыбери номер записи: ").strip()
 
